@@ -166,6 +166,15 @@ Add `.testoptimization/` to `.gitignore`. Generate a fresh plan for each CI work
 
 Use the following examples as starting points for GitHub Actions and CircleCI.
 
+### Skip workers for empty plans
+
+A successful plan can contain no runnable files, for example when Test Impact Analysis skips every discovered file. Gate worker allocation on `has_tests` to avoid checkout, dependency installation, and browser setup for an empty plan. The planning job still runs.
+
+- **GitHub Actions:** expose `steps.dd_plan.outputs.has_tests` as a planning-job output and add `if: ${{ needs.dd_plan.outputs.has_tests == 'true' }}` to the test job. GitHub evaluates this condition before expanding the matrix. Compare against the string `'true'` because step outputs are strings.
+- **CircleCI:** pass `.testoptimization/circleci/parameters.json` to `continuation/continue`. The file contains `parallelism` and a Boolean `has_tests`. Declare both pipeline parameters in the continuation configuration and add `when: << pipeline.parameters.has_tests >>` to the test workflow. Merge other continuation parameters into the same JSON object if needed, and keep unrelated workflows outside this condition.
+
+A condition on an individual step does not prevent worker allocation. Runner counts and GitHub matrix artifacts remain positive for compatibility, including empty plans. Adopt the conditions in the following examples; upgrading `ddtest` alone does not change scheduling. Treat planning failures and missing CI outputs as errors, not as successful empty plans.
+
 {{< collapse-content title="Ruby" level="h3" >}}
 
 {{< tabs >}}
@@ -189,6 +198,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.dd_plan.outputs.matrix }}
+      has_tests: ${{ steps.dd_plan.outputs.has_tests }}
     steps:
       - uses: actions/checkout@v4
       - name: Download ddtest binary
@@ -221,6 +231,7 @@ jobs:
   dd_test:
     runs-on: ubuntu-latest
     needs: [dd_plan]
+    if: ${{ needs.dd_plan.outputs.has_tests == 'true' }}
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.dd_plan.outputs.matrix) }}
@@ -295,14 +306,9 @@ jobs:
           paths:
             - .testoptimization
             - bin/ddtest
-      - run:
-          name: Continue with selected parallelism
-          command: |
-            desired=$(cat .testoptimization/runner/parallel-runners.txt 2>/dev/null || echo 1)
-            printf '{"parallelism": %s}\n' "${desired}" > pipeline-parameters.json
       - continuation/continue:
           configuration_path: .circleci/test.yml
-          parameters: pipeline-parameters.json
+          parameters: .testoptimization/circleci/parameters.json
 
 workflows:
   plan:
@@ -319,6 +325,9 @@ parameters:
   parallelism:
     type: integer
     default: 1
+  has_tests:
+    type: boolean
+    default: false
 
 orbs:
   ruby: circleci/ruby@2
@@ -346,6 +355,7 @@ jobs:
 
 workflows:
   test:
+    when: << pipeline.parameters.has_tests >>
     jobs:
       - test
 {{< /code-block >}}
@@ -378,6 +388,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.dd_plan.outputs.matrix }}
+      has_tests: ${{ steps.dd_plan.outputs.has_tests }}
     steps:
       - uses: actions/checkout@v4
       - name: Download ddtest binary
@@ -413,6 +424,7 @@ jobs:
   dd_test:
     runs-on: ubuntu-latest
     needs: [dd_plan]
+    if: ${{ needs.dd_plan.outputs.has_tests == 'true' }}
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.dd_plan.outputs.matrix) }}
@@ -491,14 +503,9 @@ jobs:
           paths:
             - .testoptimization
             - bin/ddtest
-      - run:
-          name: Continue with selected parallelism
-          command: |
-            desired=$(cat .testoptimization/runner/parallel-runners.txt 2>/dev/null || echo 1)
-            printf '{"parallelism": %s}\n' "${desired}" > pipeline-parameters.json
       - continuation/continue:
           configuration_path: .circleci/test.yml
-          parameters: pipeline-parameters.json
+          parameters: .testoptimization/circleci/parameters.json
 
 workflows:
   plan:
@@ -515,6 +522,9 @@ parameters:
   parallelism:
     type: integer
     default: 1
+  has_tests:
+    type: boolean
+    default: false
 
 orbs:
   test-optimization-circleci-orb: datadog/test-optimization-circleci-orb@1
@@ -543,6 +553,7 @@ jobs:
 
 workflows:
   test:
+    when: << pipeline.parameters.has_tests >>
     jobs:
       - test
 {{< /code-block >}}
