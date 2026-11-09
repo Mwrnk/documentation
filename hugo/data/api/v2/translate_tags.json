@@ -41,7 +41,7 @@
   },
   "agent-health": {
     "name": "Agent Health",
-    "description": "View Agent Health issues reported for node Agents and Cluster Agents."
+    "description": "View Agent Health issues reported for node Agents and Cluster Agents, list open issues across the organization, and get an issue with its available remediation. The meaning of `resource_id` depends on `resource_kind`: hostname for `host`, DaemonSet UID for `deployment` (node Agent), cluster UUID for `cluster`, or OpenTelemetry collector ID for `otel`. The `cluster_agent` kind is also supported."
   },
   "agent-observability": {
     "name": "Agent Observability",
